@@ -12,12 +12,12 @@ A production-ready LLM inference API demonstrating core ML systems engineering: 
 
 ## Key Features
 
-- ✅ **Dynamic Batching Scheduler** — async queue groups up to 8 requests per 20ms window, boosting GPU/CPU utilization
-- ✅ **KV-Cache Optimization** — manual token-generation loop using `past_key_values` to skip prompt recomputation each decode step (O(1) per token vs O(N²))
-- ✅ **Prometheus Metrics** — tracks `request_count`, `token_count`, and `latency` histograms (p50/p90/p95)
-- ✅ **Grafana Dashboard** — live time-series panels for throughput, latency percentiles, and request rates
-- ✅ **Docker Compose** — one command to bring up API server + Prometheus + Grafana
-- ✅ **Locust Load Testing** — simulates 100+ concurrent users across `/generate` and `/batch_generate`
+-  **Dynamic Batching Scheduler** — async queue groups up to 8 requests per 20ms window, boosting GPU/CPU utilization
+-  **KV-Cache Optimization** — manual token-generation loop using `past_key_values` to skip prompt recomputation each decode step (O(1) per token vs O(N²))
+-  **Prometheus Metrics** — tracks `request_count`, `token_count`, and `latency` histograms (p50/p90/p95)
+-  **Grafana Dashboard** — live time-series panels for throughput, latency percentiles, and request rates
+-  **Docker Compose** — one command to bring up API server + Prometheus + Grafana
+-  **Locust Load Testing** — simulates 100+ concurrent users across `/generate` and `/batch_generate`
 
 ---
 
