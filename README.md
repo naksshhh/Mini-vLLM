@@ -10,7 +10,7 @@ A production-ready LLM inference API demonstrating core ML systems engineering: 
 
 ---
 
-## What This Demonstrates
+## Key Features
 
 - ✅ **Dynamic Batching Scheduler** — async queue groups up to 8 requests per 20ms window, boosting GPU/CPU utilization
 - ✅ **KV-Cache Optimization** — manual token-generation loop using `past_key_values` to skip prompt recomputation each decode step (O(1) per token vs O(N²))
@@ -121,18 +121,6 @@ docker-compose -f docker/docker-compose.yml down
 | `POST` | `/batch_generate` | List of prompts → list of texts |
 | `GET` | `/metrics` | Prometheus scrape endpoint |
 
-**Example:**
-```bash
-# Single generation
-curl -X POST http://localhost:8000/generate \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Once upon a time", "max_new_tokens": 40}'
-
-# Batch generation
-curl -X POST http://localhost:8000/batch_generate \
-  -H "Content-Type: application/json" \
-  -d '{"prompts": ["What is AI?", "Tell me a joke"], "max_new_tokens": 30}'
-```
 
 ---
 
@@ -156,27 +144,6 @@ python benchmark/benchmark.py --concurrency 10 --requests 100 --max_tokens 30
   --host http://localhost:8000
 ```
 
----
-
-## Key Concepts Demonstrated
-
-### Dynamic Batching
-Instead of processing each HTTP request immediately (which wastes compute on small inputs), incoming requests are placed on an `asyncio.Queue`. A background worker collects them for up to **20 ms** or until **8 requests** accumulate, then runs a single batched model forward pass and fans results back to each request's `Future`.
-
-### KV-Cache Optimization
-Standard `.generate()` re-processes the entire prompt+history at every decode step (O(N²) attention cost). This system implements a manual decode loop:
-1. **Prefill phase** — process full prompt once, save `past_key_values`
-2. **Decode phase** — pass only the newest token + cached KVs each step → O(1) attention overhead per token
-
-This mirrors the core optimization in vLLM and TensorRT-LLM.
-
-### Observability
-Three Prometheus counters/histograms are exposed:
-- `inference_requests_total` — total request count
-- `inference_tokens_generated_total` — total tokens output
-- `inference_request_latency_seconds` — histogram with buckets at 0.1s → 50s
-
----
 
 ## Changing the Model
 
