@@ -21,29 +21,6 @@ A production-ready LLM inference API demonstrating core ML systems engineering: 
 
 ---
 
-## Architecture
-
-```
-         User Requests
-               │
-               ▼
-         FastAPI Gateway          ← /generate, /batch_generate, /health, /metrics
-               │
-       Async Request Queue        ← asyncio.Queue (max queue size, backpressure)
-               │
-       Dynamic Batch Builder      ← waits 20ms or max_batch_size=8
-               │
-       Inference Engine           ← HuggingFace Transformers (gpt2 / switchable)
-          │         │
-    KV Cache     Model.forward()  ← prefill once, decode with cached past_key_values
-               │
-    Prometheus /metrics           ← scraped every 5s
-               │
-        Grafana Dashboard         ← latency p50/p95, throughput, token rate
-```
-
----
-
 ## Project Structure
 
 ```
@@ -121,6 +98,7 @@ docker-compose -f docker/docker-compose.yml down
 | `POST` | `/batch_generate` | List of prompts → list of texts |
 | `GET` | `/metrics` | Prometheus scrape endpoint |
 
+<img width="1295" height="939" alt="grafana_dashboard_view_1773232961628" src="https://github.com/user-attachments/assets/b99bc6c8-70da-43d2-bbb0-e705e429cdee" />
 
 ---
 
