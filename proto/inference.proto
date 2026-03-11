@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package inference;
+
+// ─── Service Definition ────────────────────────────────────────────────────────
+service InferenceService {
+    // Single prompt generation
+    rpc Generate(GenerateRequest) returns (GenerateResponse);
+
+    // Batch prompt generation
+    rpc BatchGenerate(BatchGenerateRequest) returns (BatchGenerateResponse);
+
+    // Health check
+    rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// ─── Message Types ─────────────────────────────────────────────────────────────
+message GenerateRequest {
+    string prompt = 1;
+    int32  max_new_tokens = 2;  // default: 50
+}
+
+message GenerateResponse {
+    string text       = 1;
+    double latency_ms = 2;
+}
+
+message BatchGenerateRequest {
+    repeated string prompts        = 1;
+    int32           max_new_tokens = 2;
+}
+
+message BatchGenerateResponse {
+    repeated string texts      = 1;
+    double          latency_ms = 2;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+    string status       = 1;   // "ok" | "degraded"
+    bool   model_loaded = 2;
+}

@@ -1,12 +1,61 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List
+import os
+import sys
 import time
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from fastapi.responses import Response
 
 from .model import get_engine
 from .batching import DynamicBatcher
+
+
+def _read_proc_self_status() -> dict:
+    """Read key metrics from /proc/self/status (Linux only)."""
+    result = {}
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                key, _, val = line.partition(":\t")
+                result[key.strip()] = val.strip()
+    except FileNotFoundError:
+        pass
+    return result
+
+
+def get_os_metrics() -> dict:
+    """Return live OS-level process metrics. /proc on Linux, psutil fallback on Windows."""
+    pid = os.getpid()
+    if sys.platform == "linux":
+        status = _read_proc_self_status()
+        return {
+            "platform": "linux",
+            "pid": pid,
+            "rss_kb": status.get("VmRSS", "N/A"),
+            "vmpeak_kb": status.get("VmPeak", "N/A"),
+            "vmsize_kb": status.get("VmSize", "N/A"),
+            "threads": status.get("Threads", "N/A"),
+            "voluntary_ctx_switches": status.get("voluntary_ctxt_switches", "N/A"),
+            "nonvoluntary_ctx_switches": status.get("nonvoluntary_ctxt_switches", "N/A"),
+        }
+    else:
+        try:
+            import psutil
+            proc = psutil.Process(pid)
+            mem = proc.memory_info()
+            ctx = proc.num_ctx_switches()
+            return {
+                "platform": sys.platform,
+                "pid": pid,
+                "rss_kb": f"{mem.rss // 1024} kB",
+                "vmsize_kb": f"{mem.vms // 1024} kB",
+                "threads": proc.num_threads(),
+                "voluntary_ctx_switches": ctx.voluntary,
+                "nonvoluntary_ctx_switches": ctx.involuntary,
+            }
+        except ImportError:
+            return {"platform": sys.platform, "pid": pid, "note": "install psutil for non-Linux metrics"}
 
 app = FastAPI(title="ML Inference System", description="High-Performance LLM Inference Server")
 
@@ -67,6 +116,14 @@ async def health_check():
 async def metrics():
     """Prometheus metrics endpoint"""
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+@app.get("/sys/info")
+async def sys_info():
+    """
+    Live OS-level process metrics (Linux: /proc/self/status, Windows: psutil).
+    Shows: RSS memory, virtual memory peak, thread count, context switches.
+    """
+    return get_os_metrics()
 
 @app.post("/generate", response_model=GenerateResponse)
 async def generate(req: GenerateRequest):

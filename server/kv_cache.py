@@ -2,12 +2,6 @@ import torch
 from typing import Tuple, Optional
 
 class KVCache:
-    """
-    A simple KV Cache manager.
-    In a real system like vLLM, this uses PagedAttention.
-    Here we wrap the past_key_values returned by HuggingFace Transformers
-    to demonstrate caching during iterative generation.
-    """
     def __init__(self):
         self.past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
         

@@ -5,7 +5,6 @@ from typing import List, Optional
 
 from .kv_cache import KVCache
 
-# Allow override via environment later if needed
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt2")
 
 class InferenceEngine:
@@ -43,7 +42,6 @@ class InferenceEngine:
         
         with torch.no_grad():
             for _ in range(max_new_tokens):
-                # Only pass input_ids for the new token if we have a cache
                 if cache.get() is not None:
                     # After the first step, input_ids is just the last generated token
                     model_inputs = {
@@ -161,7 +159,6 @@ class InferenceEngine:
         ]
         return generated_texts
 
-# Singleton instance for the server
 engine = None
 
 def get_engine():

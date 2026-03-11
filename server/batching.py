@@ -52,8 +52,6 @@ class DynamicBatcher:
                 first_item = await self.queue.get()
                 batch.append(first_item)
                 
-                # Now try to gather more items up to max_batch_size, 
-                # but only wait for timeout_ms
                 timeout_time = time.time() + self.timeout_ms
                 
                 while len(batch) < self.max_batch_size:
@@ -68,7 +66,6 @@ class DynamicBatcher:
                     except asyncio.TimeoutError:
                         break
                 
-                # We have a batch, let's process it
                 await self._process_batch(batch)
                 
             except asyncio.CancelledError:
@@ -82,13 +79,10 @@ class DynamicBatcher:
             return
             
         prompts = [item.prompt for item in batch]
-        # In a real scenario we might need to group by max_new_tokens, 
-        # but for simplicity we'll just take the max requested in the batch
+
         max_tokens = max(item.max_new_tokens for item in batch)
         
         try:
-            # The actual InferenceEngine is synchronous and CPU-bound, 
-            # so we should run it in an executor to not block the asyncio loop
             loop = asyncio.get_running_loop()
             results = await loop.run_in_executor(
                 None, 

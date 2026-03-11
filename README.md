@@ -18,6 +18,9 @@ A production-ready LLM inference API demonstrating core ML systems engineering: 
 - ✅ **Grafana Dashboard** — live time-series panels for throughput, latency percentiles, and request rates
 - ✅ **Docker Compose** — one command to bring up API server + Prometheus + Grafana
 - ✅ **Locust Load Testing** — simulates 100+ concurrent users across `/generate` and `/batch_generate`
+- ✅ **gRPC Transport** — binary protobuf serialization + HTTP/2 multiplexing alongside FastAPI with head-to-head comparison benchmark
+- ✅ **Linux OS Profiling** — `/proc` memory tracking, `perf stat` CPU counters, `taskset` CPU pinning tools
+- ✅ **Distributed Multi-Worker** — async round-robin router with health checking, automatic failover, and per-worker stats
 
 ---
 
@@ -27,7 +30,7 @@ A production-ready LLM inference API demonstrating core ML systems engineering: 
          User Requests
                │
                ▼
-         FastAPI Gateway          ← /generate, /batch_generate, /health, /metrics
+         FastAPI Gateway          ← /generate, /batch_generate, /health, /metrics, /sys/info
                │
        Async Request Queue        ← asyncio.Queue (max queue size, backpressure)
                │
@@ -40,6 +43,16 @@ A production-ready LLM inference API demonstrating core ML systems engineering: 
     Prometheus /metrics           ← scraped every 5s
                │
         Grafana Dashboard         ← latency p50/p95, throughput, token rate
+
+══════ gRPC Transport (parallel to HTTP) ══════
+    InferenceServicer (grpc_server.py)
+    ── same DynamicBatcher ──▶ same InferenceEngine
+    protobuf binary encoding over HTTP/2
+
+══════ Distributed Mode ══════
+    Router :8080  ──round-robin──▶  Worker-1 :8001
+                  ──round-robin──▶  Worker-2 :8002
+    Per-worker health check every 5s, auto-failover
 ```
 
 ---
@@ -49,19 +62,34 @@ A production-ready LLM inference API demonstrating core ML systems engineering: 
 ```
 ml-inference-system/
 ├── server/
-│   ├── app.py          # FastAPI routes + Prometheus instrumentation
-│   ├── model.py        # HF Transformers engine with KV-cache loop
-│   ├── batching.py     # Async queue + background batch worker
-│   └── kv_cache.py     # past_key_values cache manager
+│   ├── app.py              # FastAPI routes + Prometheus + /sys/info OS metrics
+│   ├── model.py            # HF Transformers engine with KV-cache loop
+│   ├── batching.py         # Async queue + background batch worker
+│   ├── kv_cache.py         # past_key_values cache manager
+│   ├── grpc_server.py      # gRPC servicer (same batcher/engine as HTTP)
+│   ├── inference_pb2.py    # Generated protobuf classes
+│   └── inference_pb2_grpc.py  # Generated gRPC stubs
+├── proto/
+│   └── inference.proto     # Service definition (Generate, BatchGenerate, Health)
+├── distributed/
+│   ├── worker.py           # Stateless inference worker node
+│   ├── router.py           # Async round-robin router with health checking
+│   └── run_cluster.py      # Launch N workers + router locally
+├── tools/
+│   ├── profile.sh          # perf stat + /proc memory + taskset pinning (Linux)
+│   ├── monitor_proc.py     # Live /proc/<pid>/status CSV logger
+│   └── cpu_pin.sh          # CPU pinning benchmark comparison
 ├── monitoring/
-│   └── prometheus.yml  # Scrape config (model_server:8000/metrics)
+│   └── prometheus.yml      # Scrape config
 ├── load_test/
-│   └── locustfile.py   # Locust: /generate (3x weight) + /batch_generate (1x)
+│   └── locustfile.py       # Locust load simulator
 ├── benchmark/
-│   └── benchmark.py    # Async p50/p95 latency + throughput calculator
+│   ├── benchmark.py        # Async p50/p95 latency + throughput tool
+│   └── compare_transport.py  # HTTP vs gRPC head-to-head comparison
 ├── docker/
-│   ├── Dockerfile      # python:3.10-slim, pre-bakes model weights
-│   └── docker-compose.yml  # model_server + prometheus + grafana
+│   ├── Dockerfile
+│   ├── docker-compose.yml             # Single-node: server + prometheus + grafana
+│   └── docker-compose-distributed.yml # Multi-node: router + 2 workers + prometheus + grafana
 ├── architecture.md
 └── README.md
 ```
@@ -100,6 +128,7 @@ docker-compose -f docker/docker-compose.yml up --build -d
 |---|---|
 | API Docs (Swagger) | http://localhost:8000/docs |
 | Raw Metrics | http://localhost:8000/metrics |
+| OS Process Metrics | http://localhost:8000/sys/info |
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3000 (admin / admin) |
 
@@ -116,30 +145,18 @@ docker-compose -f docker/docker-compose.yml down
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/health` | Liveness check — returns model status |
+| `GET` | `/health` | Liveness check |
 | `POST` | `/generate` | Single prompt → text (routed via dynamic batcher) |
 | `POST` | `/batch_generate` | List of prompts → list of texts |
 | `GET` | `/metrics` | Prometheus scrape endpoint |
-
-**Example:**
-```bash
-# Single generation
-curl -X POST http://localhost:8000/generate \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Once upon a time", "max_new_tokens": 40}'
-
-# Batch generation
-curl -X POST http://localhost:8000/batch_generate \
-  -H "Content-Type: application/json" \
-  -d '{"prompts": ["What is AI?", "Tell me a joke"], "max_new_tokens": 30}'
-```
+| `GET` | `/sys/info` | Live OS metrics: RSS memory, threads, context switches |
 
 ---
 
 ## Benchmarking
 
 ```bash
-# Run the built-in async benchmark
+# Standard latency + throughput benchmark
 python benchmark/benchmark.py --concurrency 10 --requests 100 --max_tokens 30
 
 # Sample output (gpt2, CPU, 10 concurrent workers):
@@ -158,36 +175,116 @@ python benchmark/benchmark.py --concurrency 10 --requests 100 --max_tokens 30
 
 ---
 
+## gRPC Transport
+
+The system exposes both HTTP and gRPC interfaces backed by the same inference engine.
+
+```bash
+# Regenerate protobuf stubs (if you modify inference.proto)
+python -m grpc_tools.protoc -I./proto --python_out=./server --grpc_python_out=./server ./proto/inference.proto
+
+# Start the gRPC server (port 50051)
+python -m server.grpc_server
+
+# Run head-to-head HTTP vs gRPC comparison
+python benchmark/compare_transport.py --concurrency 10 --requests 50 --max_tokens 30
+```
+
+**gRPC advantages at high concurrency:**
+- Binary protobuf serialization (no JSON parsing overhead)
+- HTTP/2 multiplexing: multiple requests over one TCP connection
+- Lower per-message overhead at scale
+
+---
+
+## Linux OS Profiling (Linux / WSL2 / Docker shell)
+
+```bash
+# Get into the running container
+docker exec -it docker-model_server-1 bash
+
+# Profile with perf stat + /proc memory tracking
+./tools/profile.sh <server_pid> 50
+
+# Live /proc monitor (saves CSV to profiling_reports/)
+python tools/monitor_proc.py --pid <server_pid> --duration 60
+
+# CPU pinning comparison (requires taskset)
+./tools/cpu_pin.sh <server_pid>
+
+# View live OS metrics via API
+curl http://localhost:8000/sys/info
+```
+
+What the profiling shows:
+- **VmRSS / VmPeak** — actual physical memory footprint of the model
+- **Voluntary context switches** — how often the server yields CPU (correlates with async efficiency)
+- **IPC (instructions per cycle)** — compute density during batch inference
+- **Cache miss rate** — impact of CPU pinning on memory locality
+
+---
+
+## Distributed Multi-Worker
+
+Run a cluster of independent inference workers behind a round-robin router.
+
+### Local (no Docker)
+```bash
+# Launch 2 workers + router (blocking, Ctrl+C to stop)
+python distributed/run_cluster.py --workers 2 --base-port 8001 --router-port 8080
+
+# Send requests to the router (note: worker_id in response shows which worker handled it)
+curl -X POST http://localhost:8080/generate \
+     -H "Content-Type: application/json" \
+     -d '{"prompt": "Distributed inference means", "max_new_tokens": 30}'
+
+# View per-worker stats
+curl http://localhost:8080/stats
+```
+
+### Docker (multi-container)
+```bash
+# Start distributed cluster (router:8080, worker_1:8001, worker_2:8002)
+docker-compose -f docker/docker-compose-distributed.yml up --build -d
+
+# Benchmark the distributed router
+python benchmark/benchmark.py --concurrency 20 --requests 100 --url http://localhost:8080/generate
+```
+
+---
+
 ## Key Concepts Demonstrated
 
 ### Dynamic Batching
-Instead of processing each HTTP request immediately (which wastes compute on small inputs), incoming requests are placed on an `asyncio.Queue`. A background worker collects them for up to **20 ms** or until **8 requests** accumulate, then runs a single batched model forward pass and fans results back to each request's `Future`.
+Incoming requests wait up to **20ms** or until **8 requests** accumulate. A single batched model forward pass serves all — throughput scales near-linearly with batch size while latency cost is amortized.
 
 ### KV-Cache Optimization
-Standard `.generate()` re-processes the entire prompt+history at every decode step (O(N²) attention cost). This system implements a manual decode loop:
-1. **Prefill phase** — process full prompt once, save `past_key_values`
-2. **Decode phase** — pass only the newest token + cached KVs each step → O(1) attention overhead per token
+Transformer attention recomputes over O(N²) tokens per decode step. This system implements a manual decode loop:
+1. **Prefill** — full prompt processed once → `past_key_values` saved
+2. **Decode** — only newest token + cached KVs passed per step → O(1) attention cost
 
-This mirrors the core optimization in vLLM and TensorRT-LLM.
+This mirrors vLLM's core optimization (which extends it further with PagedAttention).
 
-### Observability
-Three Prometheus counters/histograms are exposed:
-- `inference_requests_total` — total request count
-- `inference_tokens_generated_total` — total tokens output
-- `inference_request_latency_seconds` — histogram with buckets at 0.1s → 50s
+### gRPC vs HTTP
+- **HTTP/1.1 + JSON**: human-readable, widely compatible, higher per-message overhead
+- **gRPC (HTTP/2 + Protobuf)**: binary encoding, multiplexed connections, lower latency at scale
+- Run `benchmark/compare_transport.py` to measure the difference under your workload.
+
+### Distributed Routing
+The router maintains a live health registry. Unhealthy workers (failed health checks) are removed from the round-robin pool and re-added when they recover. The `/stats` endpoint shows per-worker request counts and average latency — useful for detecting load imbalance.
+
+### Linux OS Observability
+- `/proc/self/status` — VmRSS (resident set size), thread count, context switches
+- `perf stat` — IPC, cache miss rates, branch mispredictions during inference
+- `taskset` — CPU pinning to restrict NUMA memory locality and measure cache effects
 
 ---
 
 ## Changing the Model
 
-Set `MODEL_NAME` environment variable before starting:
-
 ```bash
-# Locally
 MODEL_NAME=gpt2 python -m uvicorn server.app:app --port 8000
-
-# In Docker
-# Edit docker/docker-compose.yml → environment → MODEL_NAME=<your-model>
 ```
 
 Compatible with any HuggingFace CausalLM (e.g., `gpt2`, `distilgpt2`, `TinyLlama/TinyLlama-1.1B-Chat-v1.0`).
+
