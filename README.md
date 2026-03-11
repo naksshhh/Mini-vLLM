@@ -98,7 +98,6 @@ docker-compose -f docker/docker-compose.yml down
 | `POST` | `/batch_generate` | List of prompts → list of texts |
 | `GET` | `/metrics` | Prometheus scrape endpoint |
 
-<img width="1295" height="939" alt="grafana_dashboard_view_1773232961628" src="https://github.com/user-attachments/assets/b99bc6c8-70da-43d2-bbb0-e705e429cdee" />
 
 ---
 
