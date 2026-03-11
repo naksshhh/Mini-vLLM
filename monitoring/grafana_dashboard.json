@@ -1,0 +1,92 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": null,
+    "title": "LLM Inference System",
+    "tags": ["ml", "inference"],
+    "timezone": "browser",
+    "schemaVersion": 37,
+    "version": 0,
+    "refresh": "5s",
+    "time": {"from": "now-5m", "to": "now"},
+    "panels": [
+      {
+        "id": 1,
+        "type": "stat",
+        "title": "Total Requests",
+        "datasource": "Prometheus",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "area", "textMode": "auto"},
+        "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "green", "value": null}]}}},
+        "targets": [{"datasource": "Prometheus", "expr": "inference_requests_total", "legendFormat": "Requests"}]
+      },
+      {
+        "id": 2,
+        "type": "stat",
+        "title": "Total Tokens Generated",
+        "datasource": "Prometheus",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+        "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "area"},
+        "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "blue", "value": null}]}}},
+        "targets": [{"datasource": "Prometheus", "expr": "inference_tokens_generated_total", "legendFormat": "Tokens"}]
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "Request Rate (req/s)",
+        "datasource": "Prometheus",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+        "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "area"},
+        "fieldConfig": {"defaults": {"unit": "reqps", "color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "orange", "value": null}]}}},
+        "targets": [{"datasource": "Prometheus", "expr": "rate(inference_requests_total[1m])", "legendFormat": "req/s"}]
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "Token Rate (tokens/s)",
+        "datasource": "Prometheus",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+        "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "area"},
+        "fieldConfig": {"defaults": {"unit": "ops", "color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "purple", "value": null}]}}},
+        "targets": [{"datasource": "Prometheus", "expr": "rate(inference_tokens_generated_total[1m])", "legendFormat": "tokens/s"}]
+      },
+      {
+        "id": 5,
+        "type": "timeseries",
+        "title": "Request Rate Over Time",
+        "datasource": "Prometheus",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+        "options": {"tooltip": {"mode": "single"}, "legend": {"displayMode": "list"}},
+        "fieldConfig": {"defaults": {"unit": "reqps", "color": {"mode": "palette-classic"}}},
+        "targets": [{"datasource": "Prometheus", "expr": "rate(inference_requests_total[30s])", "legendFormat": "Requests/s"}]
+      },
+      {
+        "id": 6,
+        "type": "timeseries",
+        "title": "Token Throughput Over Time",
+        "datasource": "Prometheus",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+        "options": {"tooltip": {"mode": "single"}, "legend": {"displayMode": "list"}},
+        "fieldConfig": {"defaults": {"unit": "ops", "color": {"mode": "palette-classic"}}},
+        "targets": [{"datasource": "Prometheus", "expr": "rate(inference_tokens_generated_total[30s])", "legendFormat": "Tokens/s"}]
+      },
+      {
+        "id": 7,
+        "type": "timeseries",
+        "title": "Request Latency Percentiles",
+        "datasource": "Prometheus",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+        "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}},
+        "fieldConfig": {"defaults": {"unit": "s", "color": {"mode": "palette-classic"}}},
+        "targets": [
+          {"datasource": "Prometheus", "expr": "histogram_quantile(0.50, rate(inference_request_latency_seconds_bucket[1m]))", "legendFormat": "p50"},
+          {"datasource": "Prometheus", "expr": "histogram_quantile(0.90, rate(inference_request_latency_seconds_bucket[1m]))", "legendFormat": "p90"},
+          {"datasource": "Prometheus", "expr": "histogram_quantile(0.95, rate(inference_request_latency_seconds_bucket[1m]))", "legendFormat": "p95"},
+          {"datasource": "Prometheus", "expr": "histogram_quantile(0.99, rate(inference_request_latency_seconds_bucket[1m]))", "legendFormat": "p99"}
+        ]
+      }
+    ]
+  },
+  "folderId": 0,
+  "overwrite": true
+}

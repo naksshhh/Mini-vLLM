@@ -1,0 +1,39 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# HuggingFace model cache (re-downloaded on demand)
+~/.cache/huggingface/
+.cache/
+
+# Environment variables
+.env
+.env.*
+
+# Docker volumes / data
+docker/data/
+docker/grafana-data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# Locust output
+*.csv
+locust_result*
+
+# Benchmark logs
+*.log
