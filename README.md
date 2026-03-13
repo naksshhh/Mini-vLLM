@@ -10,50 +10,17 @@ A production-ready LLM inference API demonstrating core ML systems engineering: 
 
 ---
 
-## What This Demonstrates
+## Key Features
 
-- ✅ **Dynamic Batching Scheduler** — async queue groups up to 8 requests per 20ms window, boosting GPU/CPU utilization
-- ✅ **KV-Cache Optimization** — manual token-generation loop using `past_key_values` to skip prompt recomputation each decode step (O(1) per token vs O(N²))
-- ✅ **Prometheus Metrics** — tracks `request_count`, `token_count`, and `latency` histograms (p50/p90/p95)
-- ✅ **Grafana Dashboard** — live time-series panels for throughput, latency percentiles, and request rates
-- ✅ **Docker Compose** — one command to bring up API server + Prometheus + Grafana
-- ✅ **Locust Load Testing** — simulates 100+ concurrent users across `/generate` and `/batch_generate`
-- ✅ **gRPC Transport** — binary protobuf serialization + HTTP/2 multiplexing alongside FastAPI with head-to-head comparison benchmark
-- ✅ **Linux OS Profiling** — `/proc` memory tracking, `perf stat` CPU counters, `taskset` CPU pinning tools
-- ✅ **Distributed Multi-Worker** — async round-robin router with health checking, automatic failover, and per-worker stats
-
----
-
-## Architecture
-
-```
-         User Requests
-               │
-               ▼
-         FastAPI Gateway          ← /generate, /batch_generate, /health, /metrics, /sys/info
-               │
-       Async Request Queue        ← asyncio.Queue (max queue size, backpressure)
-               │
-       Dynamic Batch Builder      ← waits 20ms or max_batch_size=8
-               │
-       Inference Engine           ← HuggingFace Transformers (gpt2 / switchable)
-          │         │
-    KV Cache     Model.forward()  ← prefill once, decode with cached past_key_values
-               │
-    Prometheus /metrics           ← scraped every 5s
-               │
-        Grafana Dashboard         ← latency p50/p95, throughput, token rate
-
-══════ gRPC Transport (parallel to HTTP) ══════
-    InferenceServicer (grpc_server.py)
-    ── same DynamicBatcher ──▶ same InferenceEngine
-    protobuf binary encoding over HTTP/2
-
-══════ Distributed Mode ══════
-    Router :8080  ──round-robin──▶  Worker-1 :8001
-                  ──round-robin──▶  Worker-2 :8002
-    Per-worker health check every 5s, auto-failover
-```
+- **Dynamic Batching Scheduler** — async queue groups up to 8 requests per 20ms window, boosting GPU/CPU utilization
+- **KV-Cache Optimization** — manual token-generation loop using `past_key_values` to skip prompt recomputation each decode step (O(1) per token vs O(N²))
+- **Prometheus Metrics** — tracks `request_count`, `token_count`, and `latency` histograms (p50/p90/p95)
+- **Grafana Dashboard** — live time-series panels for throughput, latency percentiles, and request rates
+- **Docker Compose** — one command to bring up API server + Prometheus + Grafana
+- **Locust Load Testing** — simulates 100+ concurrent users across `/generate` and `/batch_generate`
+- **gRPC Transport** — binary protobuf serialization + HTTP/2 multiplexing alongside FastAPI with head-to-head comparison benchmark
+- **Linux OS Profiling** — `/proc` memory tracking, `perf stat` CPU counters, `taskset` CPU pinning tools
+- **Distributed Multi-Worker** — async round-robin router with health checking, automatic failover, and per-worker stats
 
 ---
 
@@ -159,11 +126,6 @@ docker-compose -f docker/docker-compose.yml down
 # Standard latency + throughput benchmark
 python benchmark/benchmark.py --concurrency 10 --requests 100 --max_tokens 30
 
-# Sample output (gpt2, CPU, 10 concurrent workers):
-# Throughput:    6.75 requests/sec
-# Token Rate:   202.41 tokens/sec
-# p50 Latency: 1142.11 ms
-# p95 Latency: 2415.13 ms
 ```
 
 ```bash
@@ -252,39 +214,4 @@ python benchmark/benchmark.py --concurrency 20 --requests 100 --url http://local
 ```
 
 ---
-
-## Key Concepts Demonstrated
-
-### Dynamic Batching
-Incoming requests wait up to **20ms** or until **8 requests** accumulate. A single batched model forward pass serves all — throughput scales near-linearly with batch size while latency cost is amortized.
-
-### KV-Cache Optimization
-Transformer attention recomputes over O(N²) tokens per decode step. This system implements a manual decode loop:
-1. **Prefill** — full prompt processed once → `past_key_values` saved
-2. **Decode** — only newest token + cached KVs passed per step → O(1) attention cost
-
-This mirrors vLLM's core optimization (which extends it further with PagedAttention).
-
-### gRPC vs HTTP
-- **HTTP/1.1 + JSON**: human-readable, widely compatible, higher per-message overhead
-- **gRPC (HTTP/2 + Protobuf)**: binary encoding, multiplexed connections, lower latency at scale
-- Run `benchmark/compare_transport.py` to measure the difference under your workload.
-
-### Distributed Routing
-The router maintains a live health registry. Unhealthy workers (failed health checks) are removed from the round-robin pool and re-added when they recover. The `/stats` endpoint shows per-worker request counts and average latency — useful for detecting load imbalance.
-
-### Linux OS Observability
-- `/proc/self/status` — VmRSS (resident set size), thread count, context switches
-- `perf stat` — IPC, cache miss rates, branch mispredictions during inference
-- `taskset` — CPU pinning to restrict NUMA memory locality and measure cache effects
-
----
-
-## Changing the Model
-
-```bash
-MODEL_NAME=gpt2 python -m uvicorn server.app:app --port 8000
-```
-
-Compatible with any HuggingFace CausalLM (e.g., `gpt2`, `distilgpt2`, `TinyLlama/TinyLlama-1.1B-Chat-v1.0`).
 
