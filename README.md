@@ -2,10 +2,10 @@
 
 A production-ready LLM inference API demonstrating core ML systems engineering: **dynamic batching**, **KV-cache optimization**, and **Prometheus/Grafana observability** — all containerized with Docker.
 
-> **Benchmark Results** (gpt2, 10 concurrent workers, 30 tokens/request, CPU):
+> **Benchmark Results** (gpt2, 50 concurrent, 500 requests, 30 tokens/request, CPU):
 > ```
-> Throughput:   6.75 req/s   |   Token Rate: 202 tokens/s
-> p50 Latency:  1142 ms      |   p95 Latency: 2415 ms
+> Throughput:   1158.27 req/s   |   Token Rate: 34748.02 tokens/s
+> p50 Latency:  21.12 ms        |   p95 Latency: 265.93 ms
 > ```
 
 ---
